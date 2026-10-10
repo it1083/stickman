@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>survival</title></head>
+<body>
+<canvas id="game"></canvas>
+<div id="result" style="position:fixed;top:0;left:0;color:#fff;background:#000;z-index:99;font:14px monospace;white-space:pre;"></div>
+<script src="../js/adapter.js"></script>
+<script src="../js/config.js"></script>
+<script src="../js/storage.js"></script>
+<script src="../js/audio.js"></script>
+<script src="../js/skeleton.js"></script>
+<script src="../js/effects.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/background.js"></script>
+<script src="../js/fighter.js"></script>
+<script src="../js/ai.js"></script>
+<script src="../js/input.js"></script>
+<script src="../js/adManager.js"></script>
+<script src="../js/scenes.js"></script>
+<script src="../js/fightScene.js"></script>
+<script src="../js/main.js"></script>
+<script>
+var vTime = 0;
+window.requestAnimationFrame = function (cb) {
+  return setTimeout(function () {
+    vTime += 16.7;
+    try { cb(vTime); } catch (e) {
+      document.getElementById('result').textContent += '!! FRAME ERROR: ' + (e && e.message) + '\n';
+      throw e;
+    }
+  }, 16);
+};
+SF.boot();
+var R = document.getElementById('result');
+function log(s) { R.textContent += s + '\n'; }
+function mouse(type, dx, dy) {
+  var p = { x: SF.view.ox + dx * SF.view.scale, y: SF.view.oy + dy * SF.view.scale };
+  document.getElementById('game').dispatchEvent(new MouseEvent(type, { clientX: p.x, clientY: p.y, bubbles: true, cancelable: true }));
+}
+function key(type, code) {
+  window.dispatchEvent(new KeyboardEvent(type, { code: code, key: code === 'Space' ? ' ' : code, bubbles: true, cancelable: true }));
+}
+// 主菜单 → 生存模式
+setTimeout(function () { mouse('mousedown', 667, 356); mouse('mouseup', 667, 356); log('T1 点击[生存模式] scene=' + SF.SceneManager.current().constructor.name); }, 500);
+setTimeout(function () {
+  var c = SF.SceneManager.current();
+  log('T2 生存初始: state=' + c.state + ' 敌人数=' + c.enemies.length + '（期望 2）');
+  log('T2b 敌人站位: ' + c.enemies.map(function (e) { return Math.round(e.x); }).join(','));
+}, 3000);
+// 前推 + J = 冲拳
+setTimeout(function () {
+  var c = SF.SceneManager.current();
+  key('keydown', 'KeyD');
+  key('keydown', 'KeyJ'); key('keyup', 'KeyJ');
+  setTimeout(function () {
+    log('T3 前推+J: move=' + c.player.move + '（期望 dashPunch） vx=' + c.player.vx.toFixed(0));
+    key('keyup', 'KeyD');
+  }, 100);
+}, 5000);
+setTimeout(function () {
+  var c = SF.SceneManager.current();
+  var alive = c.enemies.filter(function (e) { return e.alive(); }).length;
+  log('T4 6.5s后: state=' + c.state + ' 存活敌人=' + alive + '/' + c.enemies.length + ' player.hp=' + c.player.hp);
+  log('T5 ' + (R.textContent.indexOf('FRAME ERROR') >= 0 ? 'FAIL 有运行时错误' : 'PASS 无运行时错误'));
+  document.title = 'SURVIVAL-TEST-DONE';
+}, 7500);
+</script>
+</body>
+</html>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>视觉验证页</title>
+<style>html,body{margin:0;padding:0;background:#000;overflow:hidden}canvas{display:block}</style>
+</head>
+<body>
+<canvas id="cv" width="1334" height="750"></canvas>
+<script>
+// headless 下 rAF 不被虚拟时间驱动：用 setTimeout 驱动
+window.requestAnimationFrame = function (cb) { return setTimeout(function () { cb(window.__t = (window.__t || 0) + 16.7); }, 16); };
+window.addEventListener('error', function (e) {
+  document.body.insertAdjacentHTML('beforeend',
+    '<pre id="err" style="color:#f00;z-index:99;position:relative">' +
+    (e.error && e.error.stack ? e.error.stack : e.message) + '</pre>');
+});
+</script>
+<script src="../js/adapter.js"></script>
+<script src="../js/config.js"></script>
+<script src="../js/storage.js"></script>
+<script src="../js/audio.js"></script>
+<script src="../js/skeleton.js"></script>
+<script src="../js/effects.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/background.js"></script>
+<script>
+'use strict';
+(function () {
+  var qs = new URLSearchParams(location.search);
+  var theme = qs.get('theme') || 'rain';
+  var time = 3.2; // 固定时间：闪电可见期(rain 8s 周期前段)、萤火虫可见
+
+  var cv = document.getElementById('cv');
+  var ctx = cv.getContext('2d');
+
+  // ---- 背景 ----
+  SF.bg.draw(ctx, theme, time);
+
+  // ---- 两个火柴人对峙 ----
+  // 玩家：jab 爆发帧（t=0.34 姿势）
+  var jabPose = SF.skeleton.sampleClip(SF.skeleton.CLIPS.jab, 0.34);
+  drawFighter(ctx, 480, jabPose, 1, '#3fa9f5', '#e8f4ff');
+
+  // 敌人：hitHeavy 受击姿势
+  var hitPose = SF.skeleton.sampleClip(SF.skeleton.CLIPS.hitHeavy, 0.35);
+  drawFighter(ctx, 880, hitPose, -1, '#d43f3d', '#fff');
+
+  // 敌人 B：GUARD 站姿（验证脚方向）——用青色皮肤+不画阴影，避免地面/阴影色干扰像素断言
+  drawFighter(ctx, 1090, SF.skeleton.GUARD, -1, '#2fd4c4', '#fff', true);
+
+  // ---- 拳风月牙（在玩家拳头处）----
+  var B = SF.skeleton.BONE, D2R = Math.PI / 180;
+  var p = jabPose, s = 1;
+  var hip = { x: p.rootX * s, y: -p.hipH * s };
+  var leanR = p.lean * D2R;
+  var upX = Math.sin(leanR), upY = -Math.cos(leanR);
+  var sx = 480 + (hip.x + upX * (B.torso - 6) * s);
+  var sy = 640 + (hip.y + upY * (B.torso - 6) * s);
+  var b1 = p.aF[0] * D2R, b2 = (p.aF[0] + p.aF[1]) * D2R;
+  var wx = sx + Math.sin(b1) * B.upperArm * s + Math.sin(b2) * B.foreArm * s;
+  var wy = sy + Math.cos(b1) * B.upperArm * s + Math.cos(b2) * B.foreArm * s;
+  SF.fx.slash(wx, wy, 1, false, -0.12);
+  SF.fx.slash(880 - 60, 640 - 120, -1, true, -0.4); // 敌人侧演示大弧(踢风)
+
+  // 手动绘制 slash（fx.draw 需要存活周期，直接调内部绘制不可行 → 重新造一个）
+  drawSlashDemo(ctx, wx, wy, 1, false, -0.12, 0.8);
+  drawSlashDemo(ctx, 820, 520, -1, true, -0.4, 0.6);
+
+  function drawSlashDemo(ctx, x, y, dir, big, tilt, a) {
+    var r = big ? 92 : 62;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(dir, 1);
+    ctx.rotate(tilt);
+    ctx.globalAlpha = a;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+    ctx.shadowColor = '#bfe8ff';
+    ctx.shadowBlur = 14;
+    ctx.lineWidth = (big ? 9 : 6) * (0.4 + a * 0.6);
+    ctx.beginPath(); ctx.arc(0, 0, r, -1.2, 0.8); ctx.stroke();
+    ctx.globalAlpha = a * 0.45;
+    ctx.lineWidth = (big ? 4 : 2.5) * a;
+    ctx.beginPath(); ctx.arc(-12, -7, r * 0.9, -1.05, 0.7); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawFighter(ctx, x, pose, facing, color, headColor, noShadow) {
+    ctx.save();
+    ctx.translate(x, 640);
+    ctx.scale(facing, 1);
+    SF.skeleton.drawStickman(ctx, pose, { color: color, headColor: headColor, lineWidth: 9 });
+    ctx.restore();
+    // 地面阴影
+    if (noShadow) return;
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(x, 646, 34, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  document.title = 'READY:' + theme;
+
+  // ---- 像素级断言（headless --dump-dom 抓取结果）----
+  if (qs.get('check')) {
+    var results = [];
+    function sampleRegion(x0, y0, x1, y1) { // 区域内非背景像素统计
+      var img = ctx.getImageData(x0, y0, x1 - x0, y1 - y0).data;
+      var found = [];
+      for (var i = 0; i < img.length; i += 4) {
+        found.push([img[i], img[i + 1], img[i + 2]]);
+        if (found.length > 40000) break;
+      }
+      return found;
+    }
+    function hasColor(px, test) { // 区域内是否存在满足条件的像素
+      for (var i = 0; i < px.length; i++) if (test(px[i][0], px[i][1], px[i][2])) return true;
+      return false;
+    }
+    function check(name, ok) { results.push((ok ? 'PASS ' : 'FAIL ') + name); }
+
+    if (theme === 'rain') {
+      var top = sampleRegion(30, 30, 60, 60)[0];
+      check('rain: 天空深蓝(B>R)', top[2] > top[0] + 10);
+      // 闪电折线区（time=3.2 → lt=3.2 不在闪近期，跳过闪电）
+      var refl = sampleRegion(600, 645, 750, 700);
+      check('rain: 地面有冷光倒影/湿润亮斑', hasColor(refl, function (r, g, b) { return b > r + 8 && b > 60; }));
+    }
+    if (theme === 'bamboo') {
+      // 远竹位置 (90, 330~630)：应有绿色调像素
+      var bam = sampleRegion(60, 330, 130, 630);
+      check('bamboo: 竹竿绿色调', hasColor(bam, function (r, g, b) { return g > r + 10 && g > b + 10; }));
+      // 萤火虫光斑区域
+      var moon = sampleRegion(990, 130, 1110, 240);
+      check('bamboo: 明月高亮', hasColor(moon, function (r, g, b) { return r > 220 && g > 210 && b > 150; }));
+    }
+    if (theme === 'sunset') {
+      var sky = sampleRegion(30, 420, 60, 450)[0];
+      check('sunset: 低空暖色(R>B)', sky[0] > sky[2]);
+      // 海面太阳倒影波光 (667, 552~600)
+      var glint = sampleRegion(600, 552, 740, 600);
+      check('sunset: 海面波光', hasColor(glint, function (r, g, b) { return r > 180 && g > 110 && r > b + 30; }));
+    }
+    if (theme === 'night') {
+      var nsky = sampleRegion(30, 30, 60, 60)[0];
+      check('night: 天空深蓝(B>R)', nsky[2] > nsky[0] + 20);
+    }
+    if (theme === 'ink') {
+      var isky = sampleRegion(30, 30, 60, 60)[0];
+      check('ink: 宣纸暖白底(亮且 R≥G>B)', isky[0] > 225 && isky[0] >= isky[1] - 2 && isky[1] > isky[2]);
+      var sun = sampleRegion(990, 160, 1060, 230);
+      check('ink: 朱砂红日', hasColor(sun, function (r, g, b) { return r > 130 && r > g + 60 && r > b + 60; }));
+      var hill = sampleRegion(300, 560, 500, 610);
+      check('ink: 淡墨远山', hasColor(hill, function (r, g, b) { return r < 190 && Math.abs(r - g) < 14 && Math.abs(g - b) < 20 && b > 120; }));
+    }
+
+    // 通用：GUARD 敌人 B（x=1090, facing=-1, 青色皮肤 #2fd4c4, 无阴影）脚尖应朝左（面朝方向）
+    // 精确几何：前脚线段跟(1080)→尖(1065)，lineCap 左缘 1061.7 —— toeSide 取脚尖真实区域
+    //           前小腿(含圆帽)覆盖至 x≈1083.9，后脚尖朝左从 x≈1090.1 起 —— backSide 取唯一干净带 1084~1089
+    var toeSide = sampleRegion(1062, 640, 1070, 648);
+    var backSide = sampleRegion(1084, 638, 1089, 650);
+    var isBody = function (r, g, b) { return Math.abs(r - 47) < 40 && Math.abs(g - 212) < 40 && Math.abs(b - 196) < 40; }; // #2fd4c4 附近
+    check('脚尖朝面朝方向(左)存在', hasColor(toeSide, isBody));
+    check('脚背向侧无内卷像素', !hasColor(backSide, isBody));
+
+    // 拳风月牙：jab 拳头约 (550, 558)，弧半径 62 → (560~615, 540~580) 应有高亮白
+    var arc = sampleRegion(570, 530, 640, 590);
+    check('拳风月牙高亮', hasColor(arc, function (r, g, b) { return r > 175 && g > 185 && b > 185; }));
+
+    document.body.insertAdjacentHTML('beforeend',
+      '<pre id="checkresult">' + results.join('\n') + '</pre>');
+  }
+})();
+</script>
+</body>
+</html>

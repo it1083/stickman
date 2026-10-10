@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>debug</title></head>
+<body>
+<canvas id="game"></canvas>
+<div id="result" style="position:fixed;top:0;left:0;color:#fff;background:#000;z-index:99;font:14px monospace;white-space:pre;"></div>
+<script src="../js/adapter.js"></script>
+<script src="../js/config.js"></script>
+<script src="../js/storage.js"></script>
+<script src="../js/audio.js"></script>
+<script src="../js/skeleton.js"></script>
+<script src="../js/effects.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/background.js"></script>
+<script src="../js/fighter.js"></script>
+<script src="../js/ai.js"></script>
+<script src="../js/input.js"></script>
+<script src="../js/adManager.js"></script>
+<script src="../js/scenes.js"></script>
+<script src="../js/fightScene.js"></script>
+<script src="../js/main.js"></script>
+<script>
+// headless 环境下 rAF 不被虚拟时间驱动，改用 setTimeout 驱动主循环（等效 60fps）
+// 并用 try-catch 捕获主循环异常（file:// 下 onerror 只给 Script error.）
+var vTime = 0;
+window.requestAnimationFrame = function (cb) {
+  return setTimeout(function () {
+    vTime += 16.7;
+    try { cb(vTime); }
+    catch (e) {
+      var R0 = document.getElementById('result');
+      R0.textContent += '!! FRAME ERROR: ' + (e && e.message) + '\n' + (e && e.stack || '').split('\n').slice(0, 4).join('\n') + '\n';
+      throw e;
+    }
+  }, 16);
+};
+SF.boot();
+var R = document.getElementById('result');
+window.onerror = function (msg, src, line, col) {
+  R.textContent += '!! ERROR: ' + msg + ' @ ' + (src || '').split('/').pop() + ':' + line + ':' + col + '\n';
+  return false;
+};
+function log(s) { R.textContent += s + '\n'; }
+function sceneName() { return SF.SceneManager.current().constructor.name; }
+function screenOf(dx, dy) { return { x: SF.view.ox + dx * SF.view.scale, y: SF.view.oy + dy * SF.view.scale }; }
+function mouse(type, dx, dy) {
+  var p = screenOf(dx, dy);
+  document.getElementById('game').dispatchEvent(new MouseEvent(type, { clientX: p.x, clientY: p.y, bubbles: true, cancelable: true }));
+}
+log('T0 win=' + window.innerWidth + 'x' + window.innerHeight + ' scale=' + SF.view.scale.toFixed(3) + ' scene=' + sceneName());
+
+setTimeout(function () {
+  mouse('mousedown', 667, 356); mouse('mouseup', 667, 356);
+  log('T1 点击[无限乱斗] → scene=' + sceneName());
+}, 500);
+
+setTimeout(function () {
+  var c = SF.SceneManager.current();
+  log('T3 战斗场景 state=' + (c.state || '-') + ' input.enabled=' + SF.input.enabled);
+}, 5000);
+
+// 模拟摇杆：左半屏按住向右拖
+setTimeout(function () {
+  mouse('mousedown', 200, 500);
+  mouse('mousemove', 300, 500);
+}, 6000);
+setTimeout(function () {
+  var c = SF.SceneManager.current();
+  log('T4 摇杆拖动后 player.x=' + (c.player ? c.player.x.toFixed(1) : '-') +
+      ' vx=' + (c.player ? c.player.vx.toFixed(0) : '-') +
+      ' state=' + (c.player ? c.player.state : '-') +
+      ' stick.dx=' + SF.input.stick.dx.toFixed(0));
+  mouse('mouseup', 300, 500);
+}, 7500);
+
+// 点击拳按钮
+setTimeout(function () {
+  mouse('mousedown', 1200, 606); mouse('mouseup', 1200, 606);
+}, 8500);
+setTimeout(function () {
+  var c = SF.SceneManager.current();
+  log('T5 点击[拳]后 player.state=' + (c.player ? c.player.state : '-') +
+      ' move=' + (c.player ? c.player.move : '-') +
+      ' pressed=' + JSON.stringify(SF.input.pressed));
+}, 9200);
+
+setTimeout(function () {
+  log('T6 final scene=' + sceneName() + ' DONE');
+  document.title = 'AUTOTEST-DONE';
+}, 10000);
+</script>
+</body>
+</html>

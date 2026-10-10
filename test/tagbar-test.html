@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>tagbar</title></head>
+<body>
+<canvas id="game"></canvas>
+<div id="result" style="position:fixed;top:0;left:0;color:#fff;background:#000;z-index:99;font:14px monospace;white-space:pre;"></div>
+<script src="../js/adapter.js"></script>
+<script src="../js/config.js"></script>
+<script src="../js/storage.js"></script>
+<script src="../js/audio.js"></script>
+<script src="../js/skeleton.js"></script>
+<script src="../js/effects.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/background.js"></script>
+<script src="../js/fighter.js"></script>
+<script src="../js/ai.js"></script>
+<script src="../js/input.js"></script>
+<script src="../js/adManager.js"></script>
+<script src="../js/scenes.js"></script>
+<script src="../js/fightScene.js"></script>
+<script src="../js/main.js"></script>
+<script>
+var vTime = 0;
+window.requestAnimationFrame = function (cb) {
+  return setTimeout(function () {
+    vTime += 16.7;
+    try { cb(vTime); } catch (e) {
+      document.getElementById('result').textContent += '!! FRAME ERROR: ' + (e && e.message) + '\n';
+      throw e;
+    }
+  }, 16);
+};
+SF.boot();
+var R = document.getElementById('result');
+function log(s) { R.textContent += s + '\n'; }
+function mouse(type, dx, dy) {
+  var p = { x: SF.view.ox + dx * SF.view.scale, y: SF.view.oy + dy * SF.view.scale };
+  document.getElementById('game').dispatchEvent(new MouseEvent(type, { clientX: p.x, clientY: p.y, bubbles: true, cancelable: true }));
+}
+setTimeout(function () { mouse('mousedown', 667, 356); mouse('mouseup', 667, 356); }, 500);
+// 进入战斗后给玩家挂强 AI，打出一部分伤害形成血量差异
+setTimeout(function () {
+  var c = SF.SceneManager.current();
+  if (c.player && c.enemies) {
+    c.player.ai = new SF.AIController({ aggr: 0.9, react: 0.15, guard: 0.4, combo: 0.8 });
+    log('AI 已挂载，敌人数=' + c.enemies.length);
+  } else {
+    log('!! 未进入战斗场景');
+  }
+}, 2500);
+setTimeout(function () {
+  var c = SF.SceneManager.current();
+  var alive = c.enemies.filter(function (e) { return e.alive(); });
+  log('T1 存活敌人: ' + alive.length + ' 个，hp=' + alive.map(function (e) { return e.hp + '/' + e.maxHp; }).join(' '));
+  // 像素采样：验证每个存活敌人头顶有血条（红色像素），主敌有金框（金色像素）
+  var cv = document.getElementById('game');
+  var ctx2 = cv.getContext('2d');
+  var dpr = SF.adapter.getWinSize().dpr;
+  function sampleTag(e) {
+    var sx = Math.round((SF.view.ox + e.x * SF.view.scale) * dpr);
+    var sy = Math.round((SF.view.oy + (e.y - 140 * e.scale) * SF.view.scale) * dpr);
+    var hw = Math.round(40 * e.scale * SF.view.scale * dpr); // 半宽采样窗
+    var img = ctx2.getImageData(Math.max(0, sx - hw), Math.max(0, sy - 12), hw * 2, 24);
+    var red = 0, gold = 0, white = 0;
+    for (var i = 0; i < img.data.length; i += 4) {
+      var r = img.data[i], g = img.data[i + 1], b = img.data[i + 2];
+      if (r > 200 && g > 60 && g < 150 && b < 120) red++;        // 血条红 #ff5d3d
+      if (r > 210 && g > 160 && g < 235 && b < 120) gold++;      // 金框 #ffd24d
+      if (r > 215 && g > 215 && b > 200) white++;                // 缓降白层/高光
+    }
+    return { red: red, gold: gold, white: white };
+  }
+  var allOk = true;
+  alive.forEach(function (e, idx) {
+    var s = sampleTag(e);
+    var isMain = (e === c.enemy);
+    var ok = s.red >= 20 && (!isMain || s.gold >= 4);
+    if (!ok) allOk = false;
+    log('T2 敌' + (idx + 1) + (isMain ? '(主)' : '') + ' 头顶采样: red=' + s.red + ' gold=' + s.gold + ' white=' + s.white + ' → ' + (ok ? '✓' : '✗'));
+  });
+  log('T3 头顶血条渲染: ' + (allOk ? 'PASS' : 'FAIL'));
+  log('T4 ' + (R.textContent.indexOf('FRAME ERROR') >= 0 ? 'FAIL 有运行时错误' : 'PASS 无运行时错误'));
+  document.title = 'TAGBAR-TEST-DONE';
+}, 9000);
+</script>
+</body>
+</html>

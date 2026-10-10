@@ -1,0 +1,33 @@
+{
+  "description": "火柴人英雄格斗 - 微信小游戏",
+  "packOptions": {
+    "ignore": [
+      { "type": "folder", "value": "preview" },
+      { "type": "file", "value": "index.html" },
+      { "type": "suffix", "value": ".md" }
+    ]
+  },
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": false,
+    "minified": true,
+    "newFeature": true,
+    "coverView": true,
+    "autoAudits": false,
+    "showShadowRootInWxmlPanel": true,
+    "compileHotReLoad": false,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": true,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "showES6CompileOption": false
+  },
+  "compileType": "game",
+  "libVersion": "2.33.0",
+  "appid": "wx0000000000000000",
+  "projectname": "moqi-stickman-brawl",
+  "condition": {}
+}
