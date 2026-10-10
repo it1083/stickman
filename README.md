@@ -1,4 +1,5 @@
-![Uploading image.png…]()
+![Uploading aacbd99d-da51-479e-9350-3a89c0c96d66.png…]()
+
 
 # 墨七火柴人无限乱斗 · Moqi Stickman Ink Brawl
 
